@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime        @default(now())
+  sessions     Session[]
+  resets       PasswordReset[]
+  shares       Share[]
+  codes        CodeShare[]
+  rooms        Room[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// A file share: one short link -> one or more files stored in R2
+model Share {
+  id           String      @id @default(cuid())
+  code         String      @unique
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ownerKeyHash String?
+  title        String?
+  ready        Boolean     @default(false)
+  downloads    Int         @default(0)
+  expiresAt    DateTime
+  createdAt    DateTime    @default(now())
+  files        ShareFile[]
+
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+model ShareFile {
+  id        String  @id @default(cuid())
+  shareId   String
+  share     Share   @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  name      String
+  size      BigInt  @default(0)
+  mime      String  @default("application/octet-stream")
+  key       String  @unique
+  uploaded  Boolean @default(false)
+
+  @@index([shareId])
+}
+
+// A live collaborative code document (Yjs)
+model CodeShare {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ownerKeyHash String?
+  title        String?
+  language     String   @default("javascript")
+  state        Bytes?
+  preview      String   @default("")
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+// A live screen sharing room (WebRTC)
+model Room {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ownerKeyHash String?
+  title        String?
+  passwordHash String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([userId])
+}
