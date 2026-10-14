@@ -84,6 +84,7 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
   const [pinned, setPinned] = useState<string | null>(null);
   const [tab, setTab] = useState<"people" | "chat">("chat");
   const [unread, setUnread] = useState(0);
+  const [sideOpen, setSideOpen] = useState(false); // mobile drawer
   const [reconnecting, setReconnecting] = useState(false);
   const [text, setText] = useState("");
 
@@ -97,6 +98,8 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
   const joinRef = useRef({ name: "", password: "" });
   const tabRef = useRef(tab);
   tabRef.current = tab;
+  const sideOpenRef = useRef(false);
+  sideOpenRef.current = sideOpen;
   phaseRef.current = phase;
   const chatEnd = useRef<HTMLDivElement>(null);
   peersRef.current = peers;
@@ -179,7 +182,11 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
         case "chat": {
           const who = peersRef.current.find((x) => x.id === from);
           setChat((l) => [...l.slice(-199), { id: String(p.id), from, name: who?.name ?? "?", text: String(p.text).slice(0, 1000), ts: Date.now() }]);
-          if (tabRef.current !== "chat") setUnread((c) => c + 1);
+          {
+            const desktop = typeof window !== "undefined" && window.matchMedia("(min-width: 861px)").matches;
+            const seen = tabRef.current === "chat" && (desktop || sideOpenRef.current);
+            if (!seen) setUnread((c) => c + 1);
+          }
           break;
         }
       }
@@ -437,6 +444,10 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
             </>
           )}
           <span style={{ width: 1, height: 24, background: "var(--separator)" }} />
+          <button className="btn gray only-sm" aria-label={t("screen.chat")} onClick={() => { setTab("chat"); setUnread(0); setSideOpen(true); }}>
+            <Icon name="message" size={18} />
+            {unread > 0 && <span className="badge">{unread}</span>}
+          </button>
           {isHost && (
             <button className="btn danger" aria-label={t("screen.end")} onClick={endSession}>
               <Icon name="phoneDown" size={18} /> <span className="lbl">{t("screen.end")}</span>
@@ -448,8 +459,11 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
         </div>
       </section>
 
-      <aside className="side">
+      <aside className={`side ${sideOpen ? "open" : ""}`}>
         <div className="side-tabs">
+          <button className="icon-btn only-sm side-close" aria-label={t("common.close")} onClick={() => setSideOpen(false)}>
+            <Icon name="xmark" size={20} />
+          </button>
           <div className="seg block">
             <button className={tab === "chat" ? "on" : ""} onClick={() => { setTab("chat"); setUnread(0); }}>
               <Icon name="message" size={15} /> {t("screen.chat")}
@@ -512,6 +526,7 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
           </>
         )}
       </aside>
+      {sideOpen && <div className="side-backdrop" onClick={() => setSideOpen(false)} />}
     </div>
   );
 }
