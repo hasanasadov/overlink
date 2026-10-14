@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { limits, resolveExpiry } from "@/lib/config";
+import { DAY, limits, resolveExpiry } from "@/lib/config";
 import { randomToken, sha256 } from "@/lib/codes";
 import { fail, getUser, json, readJson } from "@/lib/http";
 import { after } from "next/server";
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const user = await getUser();
   if (!rateLimit(`files-init:${user?.id ?? clientIp(req.headers)}`, 30, 60 * 60_000)) return fail("tooMany", 429);
 
-  const body = await readJson<{ files?: { name?: unknown; size?: unknown; type?: unknown }[]; expiresIn?: unknown; title?: unknown }>(req);
+  const body = await readJson<{ files?: { name?: unknown; size?: unknown; type?: unknown }[]; expiresIn?: unknown; expiresInSeconds?: unknown; title?: unknown }>(req);
   const list = Array.isArray(body?.files) ? body.files : [];
   if (!list.length) return fail("noFiles");
   if (list.length > limits.filesPerShare) return fail("tooMany");
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       userId: user?.id ?? null,
       ownerKeyHash: ownerKey ? sha256(ownerKey) : null,
       title: str(body?.title, 120) || null,
-      expiresAt: resolveExpiry(body?.expiresIn, !!user),
+      expiresAt: resolveExpiry(body?.expiresIn, body?.expiresInSeconds, { allowNever: true, maxSeconds: 3650 * DAY }),
       files: { create: files.map((f) => ({ name: f.name, size: BigInt(f.size), mime: f.mime, key: `shares/${code}/${randomToken(9)}` })) },
     },
     include: { files: true },

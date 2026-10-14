@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
 import { useApp } from "./Providers";
-import { ExpiryPicker } from "./ExpiryPicker";
-import { CODE_LANGUAGES, LANGUAGE_LABELS, type ExpiryId } from "@/lib/config";
+import { DEFAULT_EXPIRY, ExpiryPicker, type ExpiryValue } from "./ExpiryPicker";
+import { CODE_LANGUAGES, LANGUAGE_LABELS } from "@/lib/config";
 import { saveOwnerKey } from "@/lib/client-keys";
 
 export function CodeCreate() {
@@ -13,7 +13,7 @@ export function CodeCreate() {
   const router = useRouter();
   const [language, setLanguage] = useState("javascript");
   const [title, setTitle] = useState("");
-  const [expiry, setExpiry] = useState<ExpiryId>("1d");
+  const [expiry, setExpiry] = useState<ExpiryValue>(DEFAULT_EXPIRY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -50,7 +50,7 @@ export function CodeCreate() {
         <label>{t("code.titleField")}</label>
         <input className="input" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />
       </div>
-      <ExpiryPicker value={expiry} onChange={setExpiry} />
+      <ExpiryPicker value={expiry} onChange={setExpiry}  />
       {error && <div className="form-error">{error}</div>}
       <button className="btn primary lg block" disabled={busy} onClick={create}>
         <Icon name="code" size={20} /> {t("code.create")}

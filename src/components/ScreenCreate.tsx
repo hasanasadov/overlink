@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
 import { useApp } from "./Providers";
-import { ExpiryPicker } from "./ExpiryPicker";
-import type { ExpiryId } from "@/lib/config";
+import { DEFAULT_EXPIRY, ExpiryPicker, type ExpiryValue } from "./ExpiryPicker";
 import { saveOwnerKey } from "@/lib/client-keys";
 
 export function ScreenCreate() {
@@ -13,7 +12,7 @@ export function ScreenCreate() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [password, setPassword] = useState("");
-  const [expiry, setExpiry] = useState<ExpiryId>("1d");
+  const [expiry, setExpiry] = useState<ExpiryValue>(DEFAULT_EXPIRY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 

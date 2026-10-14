@@ -21,12 +21,27 @@ export const EXPIRY_PRESETS = [
 ] as const;
 export type ExpiryId = (typeof EXPIRY_PRESETS)[number]["id"];
 
-export const ANON_MAX_EXPIRY = 7 * 24 * 60 * 60;
-export const USER_MAX_EXPIRY = 30 * 24 * 60 * 60;
+export const DAY = 24 * 60 * 60;
+// "No expiry" is stored as a far-future date so every `expiresAt > now` query keeps working.
+export const NEVER_EXPIRES = new Date("2125-01-01T00:00:00.000Z");
+export const NEVER_THRESHOLD_MS = 50 * 365 * DAY * 1000;
 
-export function resolveExpiry(id: unknown, signedIn: boolean): Date {
+export type ExpiryChoice = ExpiryId | "never" | "custom";
+
+/** Turns the client's choice into an expiry date. Custom lengths are clamped to [5 min, maxSeconds]. */
+export function resolveExpiry(
+  id: unknown,
+  customSeconds: unknown,
+  opts: { allowNever?: boolean; maxSeconds?: number } = {},
+): Date {
+  const max = opts.maxSeconds ?? 365 * DAY;
+  if (id === "never" && opts.allowNever) return NEVER_EXPIRES;
+  if (id === "custom") {
+    const n = Number(customSeconds);
+    const seconds = Number.isFinite(n) && n > 0 ? Math.min(Math.max(Math.floor(n), 300), max) : DAY;
+    return new Date(Date.now() + seconds * 1000);
+  }
   const preset = EXPIRY_PRESETS.find((p) => p.id === id) ?? EXPIRY_PRESETS[2];
-  const max = signedIn ? USER_MAX_EXPIRY : ANON_MAX_EXPIRY;
   return new Date(Date.now() + Math.min(preset.seconds, max) * 1000);
 }
 

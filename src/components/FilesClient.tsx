@@ -5,8 +5,7 @@ import Link from "next/link";
 import { Icon } from "./Icon";
 import { useApp } from "./Providers";
 import { CopyField } from "./CopyField";
-import { ExpiryPicker } from "./ExpiryPicker";
-import type { ExpiryId } from "@/lib/config";
+import { DEFAULT_EXPIRY, ExpiryPicker, type ExpiryValue } from "./ExpiryPicker";
 import { formatBytes } from "@/lib/i18n";
 import { saveOwnerKey } from "@/lib/client-keys";
 import { fileIcon } from "@/lib/file-icon";
@@ -31,7 +30,7 @@ const PROXY_MAX = 4_400_000;
 export function FilesClient({ anonMax, userMax, maxFiles }: Props) {
   const { t, user, lp } = useApp();
   const [files, setFiles] = useState<File[]>([]);
-  const [expiry, setExpiry] = useState<ExpiryId>("1d");
+  const [expiry, setExpiry] = useState<ExpiryValue>(DEFAULT_EXPIRY);
   const [title, setTitle] = useState("");
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -64,7 +63,7 @@ export function FilesClient({ anonMax, userMax, maxFiles }: Props) {
       const init = await fetch("/api/files/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })), expiresIn: expiry, title }),
+        body: JSON.stringify({ files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })), expiresIn: expiry.id, expiresInSeconds: expiry.seconds, title }),
       });
       const data = await init.json();
       if (!init.ok) throw new Error(data.error || "init");
@@ -167,7 +166,7 @@ export function FilesClient({ anonMax, userMax, maxFiles }: Props) {
       )}
 
       <div className="stack">
-        <ExpiryPicker value={expiry} onChange={setExpiry} />
+        <ExpiryPicker value={expiry} onChange={setExpiry} allowNever maxDays={3650} />
         <div className="field">
           <label>{t("files.titleField")}</label>
           <input className="input" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />

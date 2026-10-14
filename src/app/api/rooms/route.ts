@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       passwordHash: password ? await hashPassword(password) : null,
       userId: user?.id ?? null,
       ownerKeyHash: ownerKey ? sha256(ownerKey) : null,
-      expiresAt: resolveExpiry(body?.expiresIn, !!user),
+      expiresAt: resolveExpiry(body?.expiresIn, body?.expiresInSeconds),
     },
   });
   return json({ code, ownerKey, expiresAt: row.expiresAt });

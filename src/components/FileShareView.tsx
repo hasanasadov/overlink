@@ -6,6 +6,7 @@ import { useApp } from "./Providers";
 import { useRemaining } from "./Countdown";
 import { CopyField } from "./CopyField";
 import { formatBytes, formatRemaining } from "@/lib/i18n";
+import { NEVER_THRESHOLD_MS } from "@/lib/config";
 import { fileIcon } from "@/lib/file-icon";
 
 type F = { id: string; name: string; size: number; mime: string };
@@ -22,6 +23,7 @@ export function FileShareView(props: {
   const { t } = useApp();
   const [url, setUrl] = useState(`/f/${props.code}`);
   const remaining = useRemaining(props.expiresAt);
+  const never = remaining > NEVER_THRESHOLD_MS;
 
   useEffect(() => {
     setUrl(`${window.location.origin}/f/${props.code}`);
@@ -49,11 +51,11 @@ export function FileShareView(props: {
         <h1 className="large-title" style={{ wordBreak: "break-word" }}>{props.title || t("view.sharedFiles")}</h1>
         <div className="row-flex" style={{ flexWrap: "wrap", gap: 8 }}>
           <span className="pill">{t("view.filesCount", { n: props.files.length })} · {formatBytes(total)}</span>
-          <span className="pill orange"><Icon name="clock" size={13} strokeWidth={2} /> {remaining <= 0 ? t("account.expired") : t("view.expiresIn", { time: formatRemaining(remaining, t) })}</span>
+          <span className="pill orange"><Icon name="clock" size={13} strokeWidth={2} /> {never ? t("expiry.never") : remaining <= 0 ? t("account.expired") : t("view.expiresIn", { time: formatRemaining(remaining, t) })}</span>
           <span className="pill">{t("view.downloadsCount", { n: props.downloads })}</span>
         </div>
         <CopyField value={url} display={url.replace(/^https?:\/\//, "")} />
-        <p className="footnote muted">{t("view.autoDelete")}</p>
+        {!never && <p className="footnote muted">{t("view.autoDelete")}</p>}
       </div>
 
       <div className="split-body">

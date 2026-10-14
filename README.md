@@ -45,7 +45,8 @@ npm run dev               # http://localhost:3100
 
 ## Limitlər
 
-- Qeydiyyatsız: fayl başına 200 MB, ən çox 7 gün. Hesabla: 2 GB, 30 günə qədər (`.env`-dən dəyişir).
+- Müddət: hazır seçimlər (1 saat … 30 gün), "Müddətsiz" və ya istənilən sayda saat/gün (fayllar üçün 10 ilə qədər). Daxil olmaq tələb olunmur.
+- Fayl ölçüsü: qeydiyyatsız 200 MB, hesabla 2 GB (`.env`-dən dəyişir).
 - Pusher pulsuz plan: 100 eyni vaxtda bağlantı, gündə 200 min mesaj. Kod redaktorunda hər yazı bütün iştirakçılara mesaj sayılır.
 - Ekran paylaşımı mesh-dir (hər təqdimatçı hər izləyiciyə birbaşa göndərir) — ~10 izləyiciyə qədər rahatdır.
   Sərt NAT arxasında TURN lazım ola bilər (`NEXT_PUBLIC_ICE_SERVERS`).
