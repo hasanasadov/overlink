@@ -394,8 +394,8 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
           </div>
           <span className="spacer" />
           <span className="pill"><Icon name="people" size={13} strokeWidth={2} /> {peers.length}</span>
-          <button className="btn primary sm" onClick={() => copy(`${window.location.origin}/s/${props.code}`)}>
-            <Icon name="link" size={15} strokeWidth={2.1} /> {t("screen.copyLink")}
+          <button className="btn primary sm" aria-label={t("screen.copyLink")} onClick={() => copy(`${window.location.origin}/s/${props.code}`)}>
+            <Icon name="link" size={15} strokeWidth={2.1} /> <span className="lbl">{t("screen.copyLink")}</span>
           </button>
         </div>
 
@@ -419,7 +419,7 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
         <div className="controls glass">
           {local ? (
             <button className="btn danger solid" onClick={stopShare}>
-              <Icon name="stop" size={16} /> {t("screen.stop")}
+              <Icon name="stop" size={16} /> <span>{t("screen.stop")}</span>
             </button>
           ) : (
             <>
@@ -431,18 +431,19 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
                   <input type="checkbox" checked={shareAudio} onChange={(e) => setShareAudio(e.target.checked)} />
                   <span />
                 </span>
-                <span className="subhead">{t("screen.shareAudio")}</span>
+                <span className="subhead lbl-wide">{t("screen.shareAudio")}</span>
+                <Icon name="speaker" size={20} className="aud-ico" />
               </label>
             </>
           )}
           <span style={{ width: 1, height: 24, background: "var(--separator)" }} />
           {isHost && (
-            <button className="btn danger" onClick={endSession}>
-              <Icon name="phoneDown" size={18} /> {t("screen.end")}
+            <button className="btn danger" aria-label={t("screen.end")} onClick={endSession}>
+              <Icon name="phoneDown" size={18} /> <span className="lbl">{t("screen.end")}</span>
             </button>
           )}
-          <button className="btn gray" onClick={leave}>
-            <Icon name="signOut" size={18} /> {t("screen.leave")}
+          <button className="btn gray" aria-label={t("screen.leave")} onClick={leave}>
+            <Icon name="signOut" size={18} /> <span className="lbl">{t("screen.leave")}</span>
           </button>
         </div>
       </section>

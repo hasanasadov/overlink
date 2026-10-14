@@ -232,8 +232,8 @@ export function CodeRoom(props: { code: string; title: string | null; language: 
             <option key={l} value={l}>{LANGUAGE_LABELS[l]}</option>
           ))}
         </select>
-        <button className="btn primary sm" onClick={() => copy(`${window.location.origin}/c/${props.code}`)}>
-          <Icon name="link" size={15} strokeWidth={2.1} /> {t("code.copyLink")}
+        <button className="btn primary sm" aria-label={t("code.copyLink")} onClick={() => copy(`${window.location.origin}/c/${props.code}`)}>
+          <Icon name="link" size={15} strokeWidth={2.1} /> <span className="lbl">{t("code.copyLink")}</span>
         </button>
         {canDelete && (
           <button className="icon-btn" onClick={remove} aria-label={t("code.delete")} title={t("code.delete")} style={{ color: "var(--red)" }}>
