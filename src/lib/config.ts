@@ -1,5 +1,15 @@
 export const SITE_NAME = "Overlink";
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+// Public base URL used in emails, canonical tags and the sitemap.
+// Prefer NEXT_PUBLIC_SITE_URL; if it is missing (or still points at localhost on a Vercel deployment),
+// fall back to the production domain Vercel exposes automatically.
+function resolveSiteUrl(): string {
+  const configured = (process.env.NEXT_PUBLIC_SITE_URL || "").trim().replace(/\/$/, "");
+  const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  const isLocal = !configured || /localhost|127\.0\.0\.1/.test(configured);
+  if (isLocal && vercelHost) return `https://${vercelHost}`;
+  return configured || "http://localhost:3100";
+}
+export const SITE_URL = resolveSiteUrl();
 export const AUTHOR = { name: "Hasanali Asadov", url: "https://asadov.vercel.app", label: "asadov.vercel.app" };
 
 export const MB = 1024 * 1024;
