@@ -2,6 +2,9 @@ import { db } from "@/lib/db";
 import { limits, resolveExpiry } from "@/lib/config";
 import { randomToken, sha256 } from "@/lib/codes";
 import { fail, getUser, json, readJson } from "@/lib/http";
+import { after } from "next/server";
+import { cleanupExpired } from "@/lib/cleanup";
+import { signedUploadUrl } from "@/lib/r2";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 import { CODE_LEN, uniqueCode } from "@/lib/share-code";
 import { str } from "@/lib/validate";
@@ -37,10 +40,14 @@ export async function POST(req: Request) {
     include: { files: true },
   });
 
+  // Opportunistic cleanup of expired shares (Vercel cron only runs daily on the free plan).
+  after(() => cleanupExpired().catch(() => {}));
+
+  const uploads = await Promise.all(share.files.map((f) => signedUploadUrl(f.key, f.mime)));
   return json({
     code,
     ownerKey,
     expiresAt: share.expiresAt,
-    files: share.files.map((f) => ({ id: f.id, name: f.name })),
+    files: share.files.map((f, i) => ({ id: f.id, name: f.name, uploadUrl: uploads[i] })),
   });
 }

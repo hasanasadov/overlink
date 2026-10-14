@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { fail, getUser, isOwner, json, readJson } from "@/lib/http";
-import { headObject } from "@/lib/r2";
+import { headObject, deleteObjects } from "@/lib/r2";
 import { str } from "@/lib/validate";
 
 export async function POST(req: Request) {
@@ -11,10 +11,15 @@ export async function POST(req: Request) {
   if (!share || share.expiresAt < new Date()) return fail("notFound", 404);
   if (!isOwner(share, user, req.headers.get("x-owner-key"))) return fail("forbidden", 403);
 
+  // Direct-to-R2 uploads can't be size-checked up front, so verify every object here.
   for (const f of share.files) {
-    const head = f.uploaded ? await headObject(f.key) : null;
-    if (!head) return fail("incomplete", 409);
-    await db.shareFile.update({ where: { id: f.id }, data: { size: BigInt(head.size) } });
+    const head = await headObject(f.key);
+    if (!head || head.size !== Number(f.size)) {
+      await deleteObjects(share.files.map((x) => x.key)).catch(() => {});
+      await db.share.delete({ where: { id: share.id } });
+      return fail("incomplete", 409);
+    }
+    await db.shareFile.update({ where: { id: f.id }, data: { uploaded: true } });
   }
   await db.share.update({ where: { id: share.id }, data: { ready: true } });
   return json({ ok: true, code });

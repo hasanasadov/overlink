@@ -6,15 +6,16 @@ import { Icon } from "./Icon";
 import { useApp } from "./Providers";
 import { Countdown } from "./Countdown";
 import { useCopy } from "./CopyField";
+import type PusherJS from "pusher-js";
 import { Mesh, type SignalData } from "@/lib/mesh";
+import { Bus } from "@/lib/bus";
+import { createPusher, realtimeConfigured } from "@/lib/pusher-client";
 import { forgetOwnerKey, getOwnerKey, getSavedName, saveName } from "@/lib/client-keys";
 
 type PeerInfo = { id: string; name: string; host: boolean; sharing: boolean; audio: boolean };
 type ChatMsg = { id: string; from: string | null; name: string; text: string; ts: number; system?: "joined" | "left" | "started" };
 type Phase = "join" | "connecting" | "in" | "closed";
 type Closed = "ended" | "kicked" | "notFound";
-
-const NO_RETRY_CODES = new Set([4401, 4403, 4404, 4408, 4410]);
 
 function VideoTile({
   stream, label, self, audio, onClick, onFullscreen, clickable,
@@ -86,16 +87,17 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
   const [reconnecting, setReconnecting] = useState(false);
   const [text, setText] = useState("");
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const pusherRef = useRef<PusherJS | null>(null);
+  const busRef = useRef<Bus | null>(null);
   const meshRef = useRef<Mesh | null>(null);
   const localRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<PeerInfo[]>([]);
   const selfRef = useRef("");
-  const intentional = useRef(false);
-  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const phaseRef = useRef<Phase>("join");
   const joinRef = useRef({ name: "", password: "" });
   const tabRef = useRef(tab);
   tabRef.current = tab;
+  phaseRef.current = phase;
   const chatEnd = useRef<HTMLDivElement>(null);
   peersRef.current = peers;
 
@@ -103,9 +105,17 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
     if (!user) setName(getSavedName());
   }, [user]);
 
-  const wsSend = useCallback((msg: unknown) => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  const addSystem = useCallback((system: NonNullable<ChatMsg["system"]>, who: string) => {
+    setChat((l) => [...l.slice(-199), { id: `${Date.now()}${Math.random()}`, from: null, name: who, text: "", ts: Date.now(), system }]);
+  }, []);
+
+  const teardown = useCallback(() => {
+    busRef.current?.destroy();
+    busRef.current = null;
+    pusherRef.current?.disconnect();
+    pusherRef.current = null;
+    meshRef.current?.closeAll();
+    meshRef.current = null;
   }, []);
 
   const stopShare = useCallback(() => {
@@ -115,132 +125,135 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
     localRef.current = null;
     setLocal(null);
     meshRef.current?.setLocal(null, []);
-    wsSend({ t: "sharing", value: false });
-  }, [wsSend]);
+    busRef.current?.send("sharing", { value: false, audio: false });
+  }, []);
 
-  const handleMessage = useCallback(
-    (msg: any) => {
-      switch (msg.t) {
-        case "joined": {
-          selfRef.current = msg.id;
-          setSelfId(msg.id);
-          setIsHost(!!msg.host);
-          setPeers(msg.peers);
-          setChat(msg.chat);
-          setStreams({});
-          setPhase("in");
-          setReconnecting(false);
-          setJoinError("");
-          meshRef.current?.closeAll();
-          const mesh = new Mesh(
-            msg.id,
-            (to, data) => wsSend({ t: "signal", to, data }),
-            (peerId, stream) => setStreams((s) => (s[peerId] === stream ? s : { ...s, [peerId]: stream })),
-            () => {},
-          );
-          meshRef.current = mesh;
-          const ls = localRef.current;
-          if (ls) {
-            const others = (msg.peers as PeerInfo[]).filter((p) => p.id !== msg.id).map((p) => p.id);
-            mesh.setLocal(ls, others);
-            wsSend({ t: "sharing", value: true, audio: ls.getAudioTracks().length > 0 });
-          }
-          break;
-        }
-        case "error": {
-          intentional.current = true; // don't auto-retry a rejected join
-          if (msg.reason === "password") {
-            setNeedPassword(true);
-            setJoinError("");
-          } else if (msg.reason === "wrongPassword") {
-            setNeedPassword(true);
-            setJoinError(t("screen.wrongPassword"));
-          } else if (msg.reason === "full") setJoinError(t("screen.roomFull"));
-          else if (msg.reason === "notFound") { setClosed("notFound"); setPhase("closed"); return; }
-          else setJoinError(t("common.error"));
-          setPhase("join");
-          break;
-        }
-        case "peer-joined":
-          setPeers((l) => [...l.filter((p) => p.id !== msg.peer.id), msg.peer]);
-          meshRef.current?.peerJoined(msg.peer.id);
-          break;
-        case "peer-left":
-          setPeers((l) => l.filter((p) => p.id !== msg.id));
-          meshRef.current?.removePeer(msg.id);
-          setStreams((s) => { const { [msg.id]: _gone, ...rest } = s; return rest; });
-          setPinned((p) => (p === msg.id ? null : p));
-          break;
-        case "sharing":
-          setPeers((l) => l.map((p) => (p.id === msg.id ? { ...p, sharing: msg.value, audio: msg.audio } : p)));
-          if (!msg.value) {
-            setStreams((s) => { const { [msg.id]: _gone, ...rest } = s; return rest; });
-            setPinned((p) => (p === msg.id ? null : p));
-          }
-          break;
-        case "signal":
-          void meshRef.current?.signal(msg.from, msg.data as SignalData);
-          break;
-        case "chat":
-          setChat((l) => [...l.slice(-199), msg.msg]);
-          if (tabRef.current !== "chat" && !msg.msg.system) setUnread((n) => n + 1);
-          break;
-        case "kicked":
-          intentional.current = true;
-          setClosed("kicked");
-          setPhase("closed");
-          break;
-        case "ended":
-          intentional.current = true;
-          setClosed("ended");
-          setPhase("closed");
-          break;
-      }
+  const close = useCallback(
+    (reason: Closed) => {
+      teardown();
+      localRef.current?.getTracks().forEach((tr) => tr.stop());
+      localRef.current = null;
+      setLocal(null);
+      setClosed(reason);
+      setPhase("closed");
     },
-    [t, wsSend],
+    [teardown],
   );
-
-  const connect = useCallback(() => {
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws/room/${props.code}`);
-    wsRef.current = ws;
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ t: "join", name: joinRef.current.name, password: joinRef.current.password, ownerKey: getOwnerKey("s", props.code) }));
-    };
-    ws.onmessage = (ev) => {
-      try { handleMessage(JSON.parse(ev.data)); } catch { /* ignore malformed */ }
-    };
-    ws.onclose = (ev) => {
-      if (wsRef.current !== ws) return;
-      if (intentional.current || NO_RETRY_CODES.has(ev.code)) return;
-      meshRef.current?.closeAll();
-      setStreams({});
-      setReconnecting(true);
-      retryTimer.current = setTimeout(connect, 1500);
-    };
-  }, [handleMessage, props.code]);
 
   const join = () => {
     const n = name.trim().slice(0, 40);
     if (!n) return;
+    if (!realtimeConfigured()) return setJoinError("Realtime is not configured (Pusher keys are missing).");
     if (props.hasPassword && !password) return setJoinError(t("screen.passwordRequired"));
     saveName(n);
     joinRef.current = { name: n, password };
-    intentional.current = false;
     setJoinError("");
     setPhase("connecting");
-    connect();
+    teardown();
+
+    const pusher = createPusher({ name: n, password, ownerKey: getOwnerKey("s", props.code) ?? "" });
+    pusherRef.current = pusher;
+    const channel = pusher.subscribe(`presence-room-${props.code}`);
+
+    const bus = new Bus(channel, (from, kind, p) => {
+      switch (kind) {
+        case "signal":
+          if (p.to === selfRef.current) void meshRef.current?.signal(from, p.data as SignalData);
+          break;
+        case "sharing": {
+          const who = peersRef.current.find((x) => x.id === from);
+          if (p.value && who && !who.sharing) addSystem("started", who.name);
+          setPeers((l) => l.map((x) => (x.id === from ? { ...x, sharing: !!p.value, audio: !!p.audio } : x)));
+          if (!p.value) {
+            setStreams((st) => { const { [from]: _gone, ...rest } = st; return rest; });
+            setPinned((cur) => (cur === from ? null : cur));
+          }
+          break;
+        }
+        case "chat": {
+          const who = peersRef.current.find((x) => x.id === from);
+          setChat((l) => [...l.slice(-199), { id: String(p.id), from, name: who?.name ?? "?", text: String(p.text).slice(0, 1000), ts: Date.now() }]);
+          if (tabRef.current !== "chat") setUnread((c) => c + 1);
+          break;
+        }
+      }
+    });
+    busRef.current = bus;
+
+    channel.bind("pusher:subscription_succeeded", (members: any) => {
+      const list: PeerInfo[] = [];
+      members.each((m: any) => list.push({ id: m.id, name: m.info?.name ?? "?", host: !!m.info?.host, sharing: false, audio: false }));
+      selfRef.current = members.myID;
+      setSelfId(members.myID);
+      setIsHost(!!members.me?.info?.host);
+      setPeers(list);
+      setStreams({});
+      setPhase("in");
+      setReconnecting(false);
+      setJoinError("");
+
+      meshRef.current?.closeAll();
+      const mesh = new Mesh(
+        members.myID,
+        (to, data) => bus.send("signal", { to, data }),
+        (peerId, stream) => setStreams((st) => (st[peerId] === stream ? st : { ...st, [peerId]: stream })),
+        () => {},
+      );
+      meshRef.current = mesh;
+      const ls = localRef.current; // resumed after a reconnect
+      if (ls) {
+        mesh.setLocal(ls, list.filter((x) => x.id !== members.myID).map((x) => x.id));
+        bus.send("sharing", { value: true, audio: ls.getAudioTracks().length > 0 });
+      }
+    });
+
+    channel.bind("pusher:subscription_error", (err: { status?: number }) => {
+      const st = err?.status;
+      teardown();
+      if (st === 404) return close("notFound");
+      setPhase("join");
+      if (st === 401) { setNeedPassword(true); setJoinError(""); }
+      else if (st === 403) { setNeedPassword(true); setJoinError(t("screen.wrongPassword")); }
+      else if (st === 409) setJoinError(t("screen.roomFull"));
+      else if (st === 429) setJoinError(t("auth.err.tooMany"));
+      else if (st === 503) setJoinError("Realtime is not configured on the server.");
+      else setJoinError(t("common.error"));
+    });
+
+    channel.bind("pusher:member_added", (m: any) => {
+      setPeers((l) => [...l.filter((x) => x.id !== m.id), { id: m.id, name: m.info?.name ?? "?", host: !!m.info?.host, sharing: false, audio: false }]);
+      addSystem("joined", m.info?.name ?? "?");
+      meshRef.current?.peerJoined(m.id);
+      const ls = localRef.current;
+      if (ls) bus.send("sharing", { value: true, audio: ls.getAudioTracks().length > 0 }); // tell the newcomer we're presenting
+    });
+    channel.bind("pusher:member_removed", (m: any) => {
+      addSystem("left", m.info?.name ?? peersRef.current.find((x) => x.id === m.id)?.name ?? "?");
+      setPeers((l) => l.filter((x) => x.id !== m.id));
+      meshRef.current?.removePeer(m.id);
+      setStreams((st) => { const { [m.id]: _gone, ...rest } = st; return rest; });
+      setPinned((cur) => (cur === m.id ? null : cur));
+    });
+    channel.bind("kick", (d: { id: string }) => d.id === selfRef.current && close("kicked"));
+    channel.bind("ended", () => close("ended"));
+
+    pusher.connection.bind("state_change", ({ current }: { current: string }) => {
+      if (phaseRef.current === "in") setReconnecting(current !== "connected");
+    });
   };
 
+  useEffect(() => () => {
+    teardown();
+    localRef.current?.getTracks().forEach((tr) => tr.stop());
+  }, [teardown]);
+
+  // The room's lifetime is fixed, so close it locally when the time is up.
   useEffect(() => {
-    return () => {
-      intentional.current = true;
-      if (retryTimer.current) clearTimeout(retryTimer.current);
-      wsRef.current?.close();
-      meshRef.current?.closeAll();
-      localRef.current?.getTracks().forEach((tr) => tr.stop());
-    };
-  }, []);
+    const ms = new Date(props.expiresAt).getTime() - Date.now();
+    if (ms <= 0 || ms > 2_000_000_000) return;
+    const id = setTimeout(() => phaseRef.current === "in" && close("ended"), ms);
+    return () => clearTimeout(id);
+  }, [props.expiresAt, close]);
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ block: "end" });
@@ -260,26 +273,35 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
     stream.getVideoTracks()[0]?.addEventListener("ended", stopShare);
     const others = peersRef.current.filter((p) => p.id !== selfRef.current).map((p) => p.id);
     meshRef.current?.setLocal(stream, others);
-    wsSend({ t: "sharing", value: true, audio: stream.getAudioTracks().length > 0 });
+    busRef.current?.send("sharing", { value: true, audio: stream.getAudioTracks().length > 0 });
   };
 
   const leave = () => {
-    intentional.current = true;
     stopShare();
-    wsRef.current?.close();
+    teardown();
     router.push(lp("/screen"));
   };
 
-  const endSession = () => {
+  const ownerHeaders = (): Record<string, string> => {
+    const k = getOwnerKey("s", props.code);
+    return k ? { "x-owner-key": k } : {};
+  };
+
+  const endSession = async () => {
     if (!confirm(t("screen.confirmEnd"))) return;
-    wsSend({ t: "end" });
+    await fetch(`/api/rooms/${props.code}`, { method: "DELETE", headers: ownerHeaders() });
     forgetOwnerKey("s", props.code);
   };
+
+  const kick = (id: string) =>
+    void fetch(`/api/rooms/${props.code}/kick`, { method: "POST", headers: { "Content-Type": "application/json", ...ownerHeaders() }, body: JSON.stringify({ id }) });
 
   const sendChat = () => {
     const v = text.trim();
     if (!v) return;
-    wsSend({ t: "chat", text: v });
+    const id = `${Date.now()}${Math.random()}`;
+    busRef.current?.send("chat", { id, text: v });
+    setChat((l) => [...l.slice(-199), { id, from: selfRef.current, name: joinRef.current.name, text: v, ts: Date.now() }]);
     setText("");
   };
 
@@ -440,7 +462,7 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
                   </div>
                 </div>
                 {isHost && p.id !== selfId && (
-                  <button className="icon-btn" title={t("screen.kick")} aria-label={t("screen.kick")} onClick={() => wsSend({ t: "kick", id: p.id })}>
+                  <button className="icon-btn" title={t("screen.kick")} aria-label={t("screen.kick")} onClick={() => kick(p.id)}>
                     <Icon name="xmarkCircle" size={20} />
                   </button>
                 )}

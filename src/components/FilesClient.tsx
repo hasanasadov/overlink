@@ -13,17 +13,20 @@ import { fileIcon } from "@/lib/file-icon";
 
 type Props = { anonMax: number; userMax: number; maxFiles: number };
 
-function putFile(url: string, file: File, headers: Record<string, string>, onProgress: (p: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
+function putFile(url: string, file: File, headers: Record<string, string>, onProgress: (p: number) => void): Promise<number> {
+  return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
     for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(String(xhr.status))));
-    xhr.onerror = () => reject(new Error("network"));
+    xhr.onload = () => resolve(xhr.status);
+    xhr.onerror = () => resolve(0); // 0 = network / CORS failure
     xhr.send(file);
   });
 }
+
+// Vercel functions reject request bodies over ~4.5 MB, so the server-side fallback is for small files only.
+const PROXY_MAX = 4 * 1024 * 1024;
 
 export function FilesClient({ anonMax, userMax, maxFiles }: Props) {
   const { t, user, lp } = useApp();
@@ -66,14 +69,18 @@ export function FilesClient({ anonMax, userMax, maxFiles }: Props) {
       const data = await init.json();
       if (!init.ok) throw new Error(data.error || "init");
       saveOwnerKey("f", data.code, data.ownerKey);
-      const headers: Record<string, string> = { "Content-Type": "application/octet-stream" };
-      if (data.ownerKey) headers["x-owner-key"] = data.ownerKey;
-
       for (let i = 0; i < files.length; i++) {
-        await putFile(`/api/files/upload/${data.code}/${data.files[i].id}`, files[i], { ...headers, "Content-Type": files[i].type || "application/octet-stream" }, (p) =>
-          setProgress((arr) => arr.map((v, idx) => (idx === i ? p : v))),
-        );
-        setProgress((arr) => arr.map((v, idx) => (idx === i ? 1 : v)));
+        const f = files[i];
+        const type = f.type || "application/octet-stream";
+        const onProgress = (p: number) => setProgress((arr) => arr.map((v, idx) => (idx === i ? p : v)));
+
+        // Direct to Cloudflare R2 (needs the bucket CORS policy); small files can fall back to the API.
+        let status = await putFile(data.files[i].uploadUrl, f, { "Content-Type": type }, onProgress);
+        if (status === 0 && f.size <= PROXY_MAX) {
+          status = await putFile(`/api/files/upload/${data.code}/${data.files[i].id}`, f, { "Content-Type": type, ...(data.ownerKey ? { "x-owner-key": data.ownerKey } : {}) }, onProgress);
+        }
+        if (status < 200 || status >= 300) throw new Error(`upload ${status}`);
+        onProgress(1);
       }
 
       const done = await fetch("/api/files/complete", {

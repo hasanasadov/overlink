@@ -4,6 +4,7 @@ import { fail, getUser, isOwner, json } from "@/lib/http";
 import { putStream, deleteObject } from "@/lib/r2";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 export async function PUT(req: Request, ctx: { params: Promise<{ code: string; fileId: string }> }) {

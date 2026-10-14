@@ -1,3 +1,4 @@
+import * as Y from "yjs";
 import { db } from "@/lib/db";
 import { CODE_LANGUAGES, resolveExpiry } from "@/lib/config";
 import { randomToken, sha256 } from "@/lib/codes";
@@ -12,12 +13,15 @@ export async function POST(req: Request) {
   const body = await readJson(req);
   const language = CODE_LANGUAGES.find((l) => l === body?.language) ?? "javascript";
 
+  const doc = new Y.Doc();
+  doc.getMap("meta").set("language", language);
   const code = await uniqueCode("code", CODE_LEN.code);
   const ownerKey = user ? null : randomToken(24);
   const row = await db.codeShare.create({
     data: {
       code,
       language,
+      state: Buffer.from(Y.encodeStateAsUpdate(doc)),
       title: str(body?.title, 120) || null,
       userId: user?.id ?? null,
       ownerKeyHash: ownerKey ? sha256(ownerKey) : null,

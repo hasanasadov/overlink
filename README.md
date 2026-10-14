@@ -5,13 +5,15 @@ Müəllif / Author: **Hasanali Asadov** — [asadov.vercel.app](https://asadov.v
 
 | Bölmə | Link | Texnologiya |
 |---|---|---|
-| Fayl paylaşımı | `/f/abc123` | Cloudflare R2 + Neon Postgres, bitmə vaxtı ilə avtomatik silinmə |
-| Kod paylaşımı | `/c/abc123` | Yjs + CodeMirror 6, canlı kursor/seçim, 16 dil |
-| Ekran paylaşımı | `/s/abc12` | WebRTC (mesh), ekran + səs, çat, parol, çox təqdimatçı |
+| Fayl paylaşımı | `/f/abc123` | Cloudflare R2 (birbaşa yükləmə) + Neon Postgres, bitmə vaxtı ilə avtomatik silinmə |
+| Kod paylaşımı | `/c/abc123` | Yjs + CodeMirror 6 + Pusher, canlı kursor/seçim, 16 dil |
+| Ekran paylaşımı | `/s/abc12` | WebRTC (mesh) + Pusher siqnalizasiya, ekran + səs, çat, parol, çox təqdimatçı |
 
 Hesab (e-poçt + parol, parol sıfırlama Resend ilə), AZ/EN/RU, işıqlı/qaranlıq rejim.
 
-## İşə salmaq
+Tətbiq tam serverless-dir — **Vercel-də işləyir** (öz WebSocket serveri yoxdur).
+
+## Yerli işə salmaq
 
 ```bash
 cp .env.example .env      # dəyərləri doldurun
@@ -20,26 +22,31 @@ npx prisma db push        # Neon-da cədvəlləri yaradır
 npm run dev               # http://localhost:3100
 ```
 
-Production: `npm run build && npm start` (və ya `Dockerfile`).
+## Vercel-ə yerləşdirmək
 
-> **Vacib:** Layihə öz Node serveri (`server/index.ts`) ilə işləyir — Next.js + WebSocket (`/ws/code/*`, `/ws/room/*`)
-> bir prosesdə. Buna görə **Vercel serverless-də işləməz**; Railway / Fly.io / Render / VPS (Docker) istifadə edin.
-> Real vaxt otaqları prosesin yaddaşındadır — tək instansiya kimi işlədin.
+1. **Environment Variables** (Project → Settings): `.env.example`-dakı hamısı. `NEXT_PUBLIC_SITE_URL` = real saytın ünvanı.
+2. **Pusher Channels** (pusher.com → Create app): App Keys-dən `PUSHER_APP_ID`, `PUSHER_SECRET`, `NEXT_PUBLIC_PUSHER_KEY`,
+   `NEXT_PUBLIC_PUSHER_CLUSTER`. **App Settings → "Enable client events" mütləq açıq olmalıdır.**
+3. **R2 CORS** (Cloudflare → R2 → bucket → Settings → CORS policy), brauzer birbaşa R2-yə yükləsin deyə:
 
-## Mühit dəyişənləri
+```json
+[
+  {
+    "AllowedOrigins": ["https://SIZIN-DOMEN", "http://localhost:3100"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
 
-`.env.example`-a baxın. Əsasları: `DATABASE_URL`, `DIRECT_URL` (Neon), `R2_*` (Cloudflare R2), `RESEND_API_KEY`,
-`EMAIL_FROM`, `NEXT_PUBLIC_SITE_URL` (canonical/sitemap üçün real domen), `CRON_SECRET`.
-`NEXT_PUBLIC_ICE_SERVERS` — ciddi NAT/korporativ şəbəkələr üçün TURN server (JSON).
+4. `CRON_SECRET` təyin edin — `vercel.json` gündə bir dəfə `/api/cron/cleanup` çağırır (vaxtı bitmiş fayllar R2 və DB-dən silinir).
+   Əlavə olaraq hər yeni yükləmədə də təmizləmə işləyir; vaxtı bitmiş linklər isə dərhal 404 verir.
 
-## Bitmə vaxtı və təmizləmə
+## Limitlər
 
-Server hər dəqiqə `cleanupExpired()` işlədir: vaxtı bitmiş paylaşımlar əvvəlcə R2-dən, sonra Postgres-dən silinir
-(yarımçıq yükləmələr 1 saatdan sonra). Əlavə olaraq xarici cron üçün:
-`POST /api/cron/cleanup` + `Authorization: Bearer $CRON_SECRET`.
-
-## Limitlər (`.env`-dən dəyişir)
-
-Qeydiyyatsız: fayl başına 200 MB, ən çox 7 gün. Hesabla: 2 GB, 30 günə qədər.
-Ekran paylaşımı mesh-dir (hər təqdimatçı hər izləyiciyə birbaşa göndərir) — ~10-15 izləyiciyə qədər rahatdır;
-daha çoxu üçün SFU (məs. LiveKit) lazımdır.
+- Qeydiyyatsız: fayl başına 200 MB, ən çox 7 gün. Hesabla: 2 GB, 30 günə qədər (`.env`-dən dəyişir).
+- Pusher pulsuz plan: 100 eyni vaxtda bağlantı, gündə 200 min mesaj. Kod redaktorunda hər yazı bütün iştirakçılara mesaj sayılır.
+- Ekran paylaşımı mesh-dir (hər təqdimatçı hər izləyiciyə birbaşa göndərir) — ~10 izləyiciyə qədər rahatdır.
+  Sərt NAT arxasında TURN lazım ola bilər (`NEXT_PUBLIC_ICE_SERVERS`).
+- Otaq çatı yalnız qoşulduqdan sonrakı mesajları göstərir (tarixçə saxlanmır).

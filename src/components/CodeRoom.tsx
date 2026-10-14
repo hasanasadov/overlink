@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as Y from "yjs";
-import { WebsocketProvider } from "y-websocket";
+import { PusherYProvider } from "@/lib/pusher-yjs";
+import { realtimeConfigured } from "@/lib/pusher-client";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, keymap, placeholder, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, dropCursor } from "@codemirror/view";
@@ -78,8 +79,7 @@ export function CodeRoom(props: { code: string; title: string | null; language: 
     if (!name || !hostRef.current) return;
 
     const ydoc = new Y.Doc();
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const provider = new WebsocketProvider(`${proto}//${window.location.host}/ws/code`, props.code, ydoc);
+    const provider = new PusherYProvider(props.code, ydoc, name, setStatus, () => setGone(true));
     const ytext = ydoc.getText("code");
     const meta = ydoc.getMap("meta");
     metaRef.current = meta;
@@ -121,21 +121,12 @@ export function CodeRoom(props: { code: string; title: string | null; language: 
       view.dispatch({ effects: langComp.current.reconfigure(ext) });
     };
     meta.observe(applyLanguage);
-    provider.on("sync", (synced: boolean) => synced && void applyLanguage());
+    void provider.loadSnapshot().then(applyLanguage).catch(() => {});
     void applyLanguage();
-
-    provider.on("status", ({ status: s }: { status: "connecting" | "connected" | "disconnected" }) => setStatus(s));
-    provider.on("connection-close", (e: CloseEvent | null) => {
-      if (e && (e.code === 4404 || e.code === 4410)) {
-        setGone(true);
-        provider.shouldConnect = false;
-        provider.disconnect();
-      }
-    });
 
     const updatePeople = () => {
       const list: Person[] = [];
-      awareness.getStates().forEach((st, id) => {
+      awareness.getStates().forEach((st: unknown, id: number) => {
         const u = (st as { user?: { name: string; color: string } }).user;
         if (u) list.push({ id, name: u.name, color: u.color, self: id === awareness.clientID });
       });
@@ -175,6 +166,16 @@ export function CodeRoom(props: { code: string; title: string | null; language: 
   };
 
   const canDelete = props.ownerSignedIn || (props.anonOwned && !!ownerKey);
+
+  if (!realtimeConfigured()) {
+    return (
+      <div className="container fullpage">
+        <span className="eyebrow">Pusher</span>
+        <h1 className="large-title">Realtime is not configured</h1>
+        <p className="lead">Set NEXT_PUBLIC_PUSHER_KEY and NEXT_PUBLIC_PUSHER_CLUSTER (and PUSHER_APP_ID / PUSHER_SECRET on the server).</p>
+      </div>
+    );
+  }
 
   if (gone) {
     return (

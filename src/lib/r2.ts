@@ -1,4 +1,4 @@
-import { S3Client, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import type { Readable } from "node:stream";
@@ -66,4 +66,8 @@ export async function deleteObjects(keys: string[]) {
       new DeleteObjectsCommand({ Bucket: Bucket(), Delete: { Objects: chunk.map((Key) => ({ Key })), Quiet: true } }),
     );
   }
+}
+
+export async function signedUploadUrl(key: string, mime: string, ttl = 3600) {
+  return getSignedUrl(client(), new PutObjectCommand({ Bucket: Bucket(), Key: key, ContentType: mime }), { expiresIn: ttl });
 }
