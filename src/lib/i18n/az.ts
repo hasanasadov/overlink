@@ -72,6 +72,7 @@ export const az = {
   "files.tooBig": "“{name}” çox böyükdür (maks. {size})",
   "files.tooMany": "Ən çox {count} fayl yükləmək olar",
   "files.uploadFailed": "Yükləmə alınmadı. Yenidən cəhd edin.",
+  "files.corsHint": "Bu ölçüdə faylı yükləmək üçün R2 bucket-də CORS qaydası qoyulmalıdır (README-də izah olunub).",
   "files.remove": "Siyahıdan çıxar",
 
   "view.expiresIn": "Bitməyə qalır: {time}",

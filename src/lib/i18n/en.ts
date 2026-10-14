@@ -74,6 +74,7 @@ export const en: Record<DictKey, string> = {
   "files.tooBig": "“{name}” is too large (max {size})",
   "files.tooMany": "You can upload up to {count} files",
   "files.uploadFailed": "Upload failed. Please try again.",
+  "files.corsHint": "Uploading a file this large requires a CORS rule on the R2 bucket (see the README).",
   "files.remove": "Remove from list",
 
   "view.expiresIn": "Expires in {time}",

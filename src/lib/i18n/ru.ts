@@ -74,6 +74,7 @@ export const ru: Record<DictKey, string> = {
   "files.tooBig": "«{name}» слишком большой (макс. {size})",
   "files.tooMany": "Можно загрузить не более {count} файлов",
   "files.uploadFailed": "Не удалось загрузить. Попробуйте ещё раз.",
+  "files.corsHint": "Для загрузки такого большого файла нужно настроить CORS в бакете R2 (см. README).",
   "files.remove": "Убрать из списка",
 
   "view.expiresIn": "Истекает через {time}",

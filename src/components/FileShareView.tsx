@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
 import { useApp } from "./Providers";
 import { useRemaining } from "./Countdown";
 import { CopyField } from "./CopyField";
 import { formatBytes, formatRemaining } from "@/lib/i18n";
 import { fileIcon } from "@/lib/file-icon";
-import { forgetOwnerKey, getOwnerKey } from "@/lib/client-keys";
 
 type F = { id: string; name: string; size: number; mime: string };
 
@@ -21,29 +19,15 @@ export function FileShareView(props: {
   anonOwned: boolean;
   files: F[];
 }) {
-  const { t, lp } = useApp();
-  const router = useRouter();
-  const [ownerKey, setOwnerKey] = useState<string | null>(null);
+  const { t } = useApp();
   const [url, setUrl] = useState(`/f/${props.code}`);
   const remaining = useRemaining(props.expiresAt);
-  const canDelete = props.ownerSignedIn || (props.anonOwned && !!ownerKey);
 
   useEffect(() => {
-    setOwnerKey(getOwnerKey("f", props.code));
     setUrl(`${window.location.origin}/f/${props.code}`);
   }, [props.code]);
 
   const total = props.files.reduce((n, f) => n + f.size, 0);
-
-  const remove = async () => {
-    if (!confirm(t("view.confirmDelete"))) return;
-    const res = await fetch(`/api/files/${props.code}`, { method: "DELETE", headers: ownerKey ? { "x-owner-key": ownerKey } : {} });
-    if (res.ok) {
-      forgetOwnerKey("f", props.code);
-      router.push(lp("/files"));
-      router.refresh();
-    }
-  };
 
   const downloadAll = () => {
     props.files.forEach((f, i) =>
@@ -70,13 +54,6 @@ export function FileShareView(props: {
         </div>
         <CopyField value={url} display={url.replace(/^https?:\/\//, "")} />
         <p className="footnote muted">{t("view.autoDelete")}</p>
-        {canDelete && (
-          <div>
-            <button className="btn danger" onClick={remove}>
-              <Icon name="trash" size={18} /> {t("view.delete")}
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="split-body">

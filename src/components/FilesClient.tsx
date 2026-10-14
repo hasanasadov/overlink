@@ -26,7 +26,7 @@ function putFile(url: string, file: File, headers: Record<string, string>, onPro
 }
 
 // Vercel functions reject request bodies over ~4.5 MB, so the server-side fallback is for small files only.
-const PROXY_MAX = 4 * 1024 * 1024;
+const PROXY_MAX = 4_400_000;
 
 export function FilesClient({ anonMax, userMax, maxFiles }: Props) {
   const { t, user, lp } = useApp();
@@ -79,6 +79,7 @@ export function FilesClient({ anonMax, userMax, maxFiles }: Props) {
         if (status === 0 && f.size <= PROXY_MAX) {
           status = await putFile(`/api/files/upload/${data.code}/${data.files[i].id}`, f, { "Content-Type": type, ...(data.ownerKey ? { "x-owner-key": data.ownerKey } : {}) }, onProgress);
         }
+        if (status === 0 && f.size > PROXY_MAX) throw new Error("cors");
         if (status < 200 || status >= 300) throw new Error(`upload ${status}`);
         onProgress(1);
       }
@@ -90,8 +91,8 @@ export function FilesClient({ anonMax, userMax, maxFiles }: Props) {
       });
       if (!done.ok) throw new Error("complete");
       setLink({ code: data.code, url: `${window.location.origin}/f/${data.code}` });
-    } catch {
-      setError(t("files.uploadFailed"));
+    } catch (e) {
+      setError(e instanceof Error && e.message === "cors" ? t("files.corsHint") : t("files.uploadFailed"));
     } finally {
       setBusy(false);
     }
