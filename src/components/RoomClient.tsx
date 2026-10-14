@@ -118,6 +118,11 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
     meshRef.current = null;
   }, []);
 
+  // Pusher doesn't echo client events back to the sender, so our own sharing state is set locally.
+  const markSelf = useCallback((sharing: boolean, audio: boolean) => {
+    setPeers((l) => l.map((x) => (x.id === selfRef.current ? { ...x, sharing, audio: sharing && audio } : x)));
+  }, []);
+
   const stopShare = useCallback(() => {
     const s = localRef.current;
     if (!s) return;
@@ -125,8 +130,9 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
     localRef.current = null;
     setLocal(null);
     meshRef.current?.setLocal(null, []);
+    markSelf(false, false);
     busRef.current?.send("sharing", { value: false, audio: false });
-  }, []);
+  }, [markSelf]);
 
   const close = useCallback(
     (reason: Closed) => {
@@ -184,6 +190,11 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
       const list: PeerInfo[] = [];
       members.each((m: any) => list.push({ id: m.id, name: m.info?.name ?? "?", host: !!m.info?.host, sharing: false, audio: false }));
       selfRef.current = members.myID;
+      const resumed = localRef.current;
+      if (resumed) {
+        const me = list.find((x) => x.id === members.myID);
+        if (me) { me.sharing = true; me.audio = resumed.getAudioTracks().length > 0; }
+      }
       setSelfId(members.myID);
       setIsHost(!!members.me?.info?.host);
       setPeers(list);
@@ -273,7 +284,9 @@ export function RoomClient(props: { code: string; title: string | null; hasPassw
     stream.getVideoTracks()[0]?.addEventListener("ended", stopShare);
     const others = peersRef.current.filter((p) => p.id !== selfRef.current).map((p) => p.id);
     meshRef.current?.setLocal(stream, others);
-    busRef.current?.send("sharing", { value: true, audio: stream.getAudioTracks().length > 0 });
+    const hasAudio = stream.getAudioTracks().length > 0;
+    markSelf(true, hasAudio);
+    busRef.current?.send("sharing", { value: true, audio: hasAudio });
   };
 
   const leave = () => {
