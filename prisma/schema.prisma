@@ -110,3 +110,13 @@ model Room {
   @@index([expiresAt])
   @@index([userId])
 }
+
+// Failed admin sign-in attempts, kept in Postgres so lockouts hold across serverless instances
+model AdminAttempt {
+  id        String   @id @default(cuid())
+  ipHash    String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([ipHash])
+}

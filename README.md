@@ -43,6 +43,11 @@ npm run dev               # http://localhost:3100
 4. `CRON_SECRET` təyin edin — `vercel.json` gündə bir dəfə `/api/cron/cleanup` çağırır (vaxtı bitmiş fayllar R2 və DB-dən silinir).
    Əlavə olaraq hər yeni yükləmədə də təmizləmə işləyir; vaxtı bitmiş linklər isə dərhal 404 verir.
 
+## Admin panel
+
+`/admin` — 8 rəqəmli kodla giriş (`ADMIN_PASSCODE` mühit dəyişəni; Vercel-də də əlavə edin). Bütün fayl paylaşımlarına, kod sessiyalarına və ekran otaqlarına baxmaq, canlı (Pusher presence) iştirakçı sayını görmək və silmək olur.
+Brute-force qoruması: yanlış cəhdlər Postgres-də sayılır, 15 dəqiqədə IP başına 5, ümumilikdə 40 cəhddən sonra giriş bloklanır.
+
 ## Limitlər
 
 - Müddət: hazır seçimlər (1 saat … 30 gün), "Müddətsiz" və ya istənilən sayda saat/gün (fayllar üçün 10 ilə qədər). Daxil olmaq tələb olunmur.

@@ -30,6 +30,7 @@ export async function cleanupExpired(): Promise<CleanupResult> {
     db.session.deleteMany({ where: { expiresAt: { lt: now } } }),
   ]);
   await db.passwordReset.deleteMany({ where: { expiresAt: { lt: now } } });
+  await db.adminAttempt.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } } });
 
   return { shares: shares.length, files, codes: codes.count, rooms: rooms.count, sessions: sessions.count };
 }
